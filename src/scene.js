@@ -26,44 +26,57 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 container.appendChild(renderer.domElement);
 
+// --- FOND : ÉTOILES ---
 const starsGeo = new THREE.BufferGeometry();
 const starsPos = [];
-for(let i=0; i<1000; i++) {
-    starsPos.push((Math.random() - 0.5) * 150); 
-    starsPos.push((Math.random() - 0.5) * 150); 
-    starsPos.push((Math.random() - 0.5) * 150); 
+for(let i=0; i<1500; i++) {
+    starsPos.push((Math.random() - 0.5) * 200); 
+    starsPos.push((Math.random() - 0.5) * 200); 
+    starsPos.push((Math.random() - 0.5) * 200); 
 }
 starsGeo.setAttribute('position', new THREE.Float32BufferAttribute(starsPos, 3));
-const starsMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.1, transparent: true, opacity: 0.3});
+const starsMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.08, transparent: true, opacity: 0.3});
 const starField = new THREE.Points(starsGeo, starsMat);
 scene.add(starField);
 
-// --- NOUVEAU : STRUCTURES ATOMIQUES FLOTTANTES ---
+// --- NOUVEAU : ATOMES HOLOGRAPHIQUES ÉPURÉS ---
 const atomsGroup = new THREE.Group();
 scene.add(atomsGroup);
-const neutronGeo = new THREE.IcosahedronGeometry(0.15, 1);
-const protonMat = new THREE.MeshBasicMaterial({color: 0xffaa00, transparent: true, opacity: 0.8});
-const neutronMat = new THREE.MeshBasicMaterial({color: 0x444444, transparent: true, opacity: 0.6});
-const electronGeo = new THREE.SphereGeometry(0.05, 8, 8);
-const electronMat = new THREE.MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: 0.9});
+const electronGeo = new THREE.SphereGeometry(0.04, 8, 8);
+const electronMat = new THREE.MeshBasicMaterial({color: 0xffffff});
 
-for(let i=0; i<8; i++) {
+const atomCoresMat = [];
+const atomOrbitsMat = [];
+
+for(let i=0; i<12; i++) {
     const atom = new THREE.Group();
-    for(let j=0; j<4; j++) {
-        const isProton = Math.random() > 0.5;
-        const n = new THREE.Mesh(neutronGeo, isProton ? protonMat : neutronMat);
-        n.position.set((Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3);
-        atom.add(n);
-    }
+    
+    // Noyau Lumineux
+    const coreGeo = new THREE.SphereGeometry(0.15, 16, 16);
+    const coreMat = new THREE.MeshBasicMaterial({color: savedTheme, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending});
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    atom.add(core);
+    atomCoresMat.push(coreMat);
+
+    // Orbites et Électrons
     const electrons = [];
     for(let j=0; j<3; j++) {
+        const orbitRadius = 0.4 + (j * 0.15);
+        const orbitGeo = new THREE.RingGeometry(orbitRadius, orbitRadius + 0.01, 32);
+        const orbitMat = new THREE.MeshBasicMaterial({color: savedTheme, transparent: true, opacity: 0.2, side: THREE.DoubleSide});
+        const orbit = new THREE.Mesh(orbitGeo, orbitMat);
+        orbit.rotation.x = Math.random() * Math.PI;
+        orbit.rotation.y = Math.random() * Math.PI;
+        atom.add(orbit);
+        atomOrbitsMat.push(orbitMat);
+
         const e = new THREE.Mesh(electronGeo, electronMat);
-        e.position.set(0.6, 0, 0);
-        atom.add(e);
-        electrons.push({mesh: e, angle: Math.random()*Math.PI*2, orbit: 0.6 + Math.random()*0.3});
+        orbit.add(e);
+        electrons.push({mesh: e, orbitRadius: orbitRadius, angle: Math.random()*Math.PI*2, speed: 0.02 + Math.random()*0.03});
     }
-    atom.position.set((Math.random()-0.5)*60, (Math.random()-0.5)*60, (Math.random()-0.5)*30);
-    atom.userData = {electrons: electrons, orbitSpeed: 0.001 + Math.random()*0.005};
+    
+    atom.position.set((Math.random()-0.5)*80, (Math.random()-0.5)*80, (Math.random()-0.5)*50 - 15);
+    atom.userData = {electrons: electrons, orbitSpeed: 0.001 + Math.random()*0.003};
     atomsGroup.add(atom);
 }
 // ---------------------------------------------------
@@ -86,12 +99,12 @@ const activeColor = new THREE.Color(savedActive);
 const inactiveColor = new THREE.Color(savedInactive);
 const meColor = new THREE.Color('#ffffff');
 
-const globeMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(savedTheme), wireframe: true, transparent: true, opacity: 0.4 });
+const globeMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(savedTheme), wireframe: true, transparent: true, opacity: 0.3 });
 const activeSpriteMat = new THREE.SpriteMaterial({ map: haloTexture, color: activeColor, blending: THREE.AdditiveBlending, depthWrite: false });
 const inactiveSpriteMat = new THREE.SpriteMaterial({ map: haloTexture, color: inactiveColor, blending: THREE.AdditiveBlending, depthWrite: false });
 const meSpriteMat = new THREE.SpriteMaterial({ map: haloTexture, color: meColor, blending: THREE.AdditiveBlending, depthWrite: false });
-const activeLineMat = new THREE.LineBasicMaterial({ color: activeColor, transparent: true, opacity: 0.6 });
-const inactiveLineMat = new THREE.LineBasicMaterial({ color: inactiveColor, transparent: true, opacity: 0.6 });
+const activeLineMat = new THREE.LineBasicMaterial({ color: activeColor, transparent: true, opacity: 0.4 });
+const inactiveLineMat = new THREE.LineBasicMaterial({ color: inactiveColor, transparent: true, opacity: 0.4 });
 
 const solarSystem = {}; 
 let currentPlanetId = 'main'; 
@@ -116,17 +129,7 @@ function createSystem(id, radius, isMain = false) {
         globe.position.set(Math.cos(angle) * orbitRadius, 0, Math.sin(angle) * orbitRadius);
     }
 
-    const packets = [];
-    const packetMat = new THREE.SpriteMaterial({ map: haloTexture, color: activeColor, blending: THREE.AdditiveBlending, depthWrite: false });
-    for(let i=0; i<4; i++) { 
-        const sprite = new THREE.Sprite(packetMat);
-        sprite.scale.set(0.4, 0.4, 1);
-        sprite.userData = {type: 'packet'}; // NOUVEAU: Identification des paquets
-        nodesGroup.add(sprite); 
-        packets.push({ sprite: sprite, startIdx: 0, endIdx: 0, progress: 1 });
-    }
-
-    solarSystem[id] = { globe, nodesGroup, posAttr, originalPos, pivot, radius, deviceCount: 0, id: id, packets: packets };
+    solarSystem[id] = { globe, nodesGroup, posAttr, originalPos, pivot, radius, deviceCount: 0, id: id, signals: [] };
     return solarSystem[id];
 }
 
@@ -134,7 +137,6 @@ createSystem('main', 5, true);
 
 const meSprite = new THREE.Sprite(meSpriteMat);
 meSprite.scale.set(2, 2, 1);
-// NOUVEAU: Identification hôte pour la navigation
 meSprite.userData = { isMe: true, type: 'host', systemId: 'main', ip: 'Recherche IP...', host: 'Localhost', mac: 'Système', status: 'ONLINE', geo: '-', ports: '-' };
 solarSystem['main'].nodesGroup.add(meSprite);
 
@@ -149,7 +151,7 @@ window.addPlanet = function(systemId) {
         const netSprite = new THREE.Sprite(meSpriteMat);
         netSprite.scale.set(2, 2, 1);
         netSprite.userData = {
-            isMe: true, systemId: systemId, ip: systemId, host: 'RÉSEAU LOCAL', mac: 'Infrastructure', status: 'SCAN EN COURS...', geo: '0 Appareil(s)', ports: '-'
+            isMe: true, type: 'host', systemId: systemId, ip: systemId, host: 'RÉSEAU LOCAL', mac: 'Infrastructure', status: 'SCAN EN COURS...', geo: '0 Appareil(s)', ports: '-'
         };
         sys.nodesGroup.add(netSprite);
         sys.netSprite = netSprite; 
@@ -160,7 +162,6 @@ window.addNode = function(targetSystemId, ip, status = 'active', geo = 'Inconnue
     const sys = solarSystem[targetSystemId] || solarSystem['main'];
     const sprite = new THREE.Sprite(status === 'active' ? activeSpriteMat : inactiveSpriteMat);
     sprite.scale.set(1.5, 1.5, 1); 
-    // NOUVEAU: Identification hôte
     sprite.userData = { isMe: false, type: 'host', systemId: targetSystemId, ip: ip, host: host, mac: mac, status: status, geo: geo, ports: ports };
 
     const u = Math.random();
@@ -210,7 +211,7 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         const sys = solarSystem[currentPlanetId];
         if (!sys) return;
-        // CORRECTION: Filtrer uniquement les hôtes, pas les paquets
+        // CORRECTION : On ne cible QUE les vrais appareils, pas les impulsions lumineuses !
         const hosts = sys.nodesGroup.children.filter(c => c.userData && c.userData.type === 'host');
         if (hosts.length === 0) return;
 
@@ -265,16 +266,21 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// Écouteurs de l'interface et synchronisation des couleurs des atomes
 document.getElementById('settings-btn').addEventListener('click', () => { const panel = document.getElementById('settings-panel'); panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'; });
 document.getElementById('speed-slider').addEventListener('input', (e) => { globalSpeed = parseFloat(e.target.value); localStorage.setItem('cyber_speed', globalSpeed); });
 document.getElementById('amplitude-slider').addEventListener('input', (e) => { globalAmplitude = parseFloat(e.target.value); localStorage.setItem('cyber_amplitude', globalAmplitude); });
 document.getElementById('color-theme').addEventListener('input', (e) => { 
     globeMaterial.color.set(e.target.value); 
-    activeSpriteMat.color.set(e.target.value); // Synchroniser la couleur du signal lumineux (paquets)
+    atomCoresMat.forEach(m => m.color.set(e.target.value));
+    atomOrbitsMat.forEach(m => m.color.set(e.target.value));
     document.body.style.color = e.target.value; 
     localStorage.setItem('cyber_theme', e.target.value); 
 });
-document.getElementById('color-active').addEventListener('input', (e) => { activeColor.set(e.target.value); localStorage.setItem('cyber_active', e.target.value); });
+document.getElementById('color-active').addEventListener('input', (e) => { 
+    activeColor.set(e.target.value); 
+    localStorage.setItem('cyber_active', e.target.value); 
+});
 document.getElementById('color-inactive').addEventListener('input', (e) => { inactiveColor.set(e.target.value); localStorage.setItem('cyber_inactive', e.target.value); });
 
 function animate() {
@@ -284,18 +290,19 @@ function animate() {
     starField.rotation.y += globalSpeed / 10;
     starField.rotation.x += globalSpeed / 20;
 
-    // Animation des atomes flottants
+    // Animation élégante des atomes
     Object.values(atomsGroup.children).forEach(a => {
         a.rotation.y += a.userData.orbitSpeed;
+        a.rotation.x += a.userData.orbitSpeed / 2;
         a.position.y += Math.sin(time + a.position.x)*0.01;
-        // Electrons en orbite
         a.userData.electrons.forEach(e => {
-            e.angle += 0.05;
-            e.mesh.position.set(Math.cos(e.angle)*e.orbit, Math.sin(e.angle)*e.orbit, 0);
+            e.angle += e.speed;
+            e.mesh.position.set(Math.cos(e.angle)*e.orbitRadius, Math.sin(e.angle)*e.orbitRadius, 0);
         });
     });
 
     Object.values(solarSystem).forEach(sys => {
+        // Déformation
         for (let i = 0; i < sys.posAttr.count; i++) {
             const vx = sys.originalPos[i * 3];
             const vy = sys.originalPos[i * 3 + 1];
@@ -307,26 +314,38 @@ function animate() {
         
         sys.globe.rotation.y += globalSpeed;
         sys.globe.rotation.x += globalSpeed / 4;
-        
         if (sys.globe.position.x !== 0) { sys.pivot.rotation.y += globalSpeed / 5; }
 
-        sys.packets.forEach(p => {
-            if(p.progress >= 1) {
-                p.progress = 0;
-                p.startIdx = p.endIdx;
-                p.endIdx = Math.floor(Math.random() * sys.posAttr.count); 
+        // --- NOUVEAU : SYSTÈME DE SIGNAUX RÉSEAUX (IMPULSIONS) ---
+        const hosts = sys.nodesGroup.children.filter(c => c.userData && c.userData.type === 'host' && !c.userData.isMe);
+        
+        // Apparition aléatoire d'un signal vers un noeud actif
+        if (hosts.length > 0 && Math.random() < 0.05) {
+            const target = hosts[Math.floor(Math.random() * hosts.length)];
+            const signal = new THREE.Sprite(activeSpriteMat);
+            signal.scale.set(0.6, 0.6, 1);
+            signal.position.set(0,0,0); // Part du centre
+            sys.nodesGroup.add(signal);
+            sys.signals.push({ sprite: signal, targetPos: target.position.clone(), progress: 0 });
+        }
+
+        // Déplacement du signal le long de la ligne
+        for (let i = sys.signals.length - 1; i >= 0; i--) {
+            const sig = sys.signals[i];
+            sig.progress += 0.02 + (globalSpeed * 5); // Vitesse du signal
+            
+            sig.sprite.position.copy(new THREE.Vector3(0,0,0).lerp(sig.targetPos, sig.progress));
+            
+            // Effet de "fade out" à la fin du transfert
+            if (sig.progress > 0.8) {
+                sig.sprite.material.opacity = (1 - sig.progress) * 5;
             }
-            p.progress += 0.015; 
-            
-            const sx = sys.posAttr.getX(p.startIdx), sy = sys.posAttr.getY(p.startIdx), sz = sys.posAttr.getZ(p.startIdx);
-            const ex = sys.posAttr.getX(p.endIdx), ey = sys.posAttr.getY(p.endIdx), ez = sys.posAttr.getZ(p.endIdx);
-            
-            p.sprite.position.set(
-                sx + (ex - sx) * p.progress,
-                sy + (ey - sy) * p.progress,
-                sz + (ez - sz) * p.progress
-            );
-        });
+
+            if (sig.progress >= 1) {
+                sys.nodesGroup.remove(sig.sprite);
+                sys.signals.splice(i, 1);
+            }
+        }
     });
 
     if (focusedNode) {
@@ -343,7 +362,8 @@ function animate() {
     } else {
         raycaster.setFromCamera(mouse, camera);
         let allHalos = [];
-        Object.values(solarSystem).forEach(sys => { allHalos = allHalos.concat(sys.nodesGroup.children.filter(child => child.type === 'Sprite')); });
+        // Le raycaster ignore les impulsions, il ne cherche que les hôtes
+        Object.values(solarSystem).forEach(sys => { allHalos = allHalos.concat(sys.nodesGroup.children.filter(child => child.userData && child.userData.type === 'host')); });
         const intersects = raycaster.intersectObjects(allHalos);
 
         if (intersects.length > 0) {
