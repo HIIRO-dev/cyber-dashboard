@@ -3,7 +3,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 let globalSpeed = localStorage.getItem('cyber_speed') ? parseFloat(localStorage.getItem('cyber_speed')) : 0.002;
 let globalAmplitude = localStorage.getItem('cyber_amplitude') ? parseFloat(localStorage.getItem('cyber_amplitude')) : 0.12;
+
 const savedTheme = localStorage.getItem('cyber_theme') || '#00aaff';
+const savedDefense = localStorage.getItem('cyber_defense') || '#ff00ff'; // NOUVEAU
 const savedActive = localStorage.getItem('cyber_active') || '#00ffcc';
 const savedInactive = localStorage.getItem('cyber_inactive') || '#ff3232';
 
@@ -11,6 +13,7 @@ document.body.style.color = savedTheme;
 document.getElementById('speed-slider').value = globalSpeed;
 document.getElementById('amplitude-slider').value = globalAmplitude;
 document.getElementById('color-theme').value = savedTheme;
+document.getElementById('color-defense').value = savedDefense; // NOUVEAU
 document.getElementById('color-active').value = savedActive;
 document.getElementById('color-inactive').value = savedInactive;
 
@@ -26,7 +29,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 container.appendChild(renderer.domElement);
 
-// --- FOND : ÉTOILES ---
 const starsGeo = new THREE.BufferGeometry();
 const starsPos = [];
 for(let i=0; i<1500; i++) {
@@ -39,7 +41,6 @@ const starsMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.08, transpar
 const starField = new THREE.Points(starsGeo, starsMat);
 scene.add(starField);
 
-// --- NOUVEAU : ATOMES HOLOGRAPHIQUES ÉPURÉS ---
 const atomsGroup = new THREE.Group();
 scene.add(atomsGroup);
 const electronGeo = new THREE.SphereGeometry(0.04, 8, 8);
@@ -50,15 +51,12 @@ const atomOrbitsMat = [];
 
 for(let i=0; i<12; i++) {
     const atom = new THREE.Group();
-    
-    // Noyau Lumineux
     const coreGeo = new THREE.SphereGeometry(0.15, 16, 16);
     const coreMat = new THREE.MeshBasicMaterial({color: savedTheme, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending});
     const core = new THREE.Mesh(coreGeo, coreMat);
     atom.add(core);
     atomCoresMat.push(coreMat);
 
-    // Orbites et Électrons
     const electrons = [];
     for(let j=0; j<3; j++) {
         const orbitRadius = 0.4 + (j * 0.15);
@@ -79,7 +77,6 @@ for(let i=0; i<12; i++) {
     atom.userData = {electrons: electrons, orbitSpeed: 0.001 + Math.random()*0.003};
     atomsGroup.add(atom);
 }
-// ---------------------------------------------------
 
 function createWhiteHaloTexture() {
     const canvas = document.createElement('canvas');
@@ -97,9 +94,15 @@ const haloTexture = createWhiteHaloTexture();
 
 const activeColor = new THREE.Color(savedActive);
 const inactiveColor = new THREE.Color(savedInactive);
+const defenseColor = new THREE.Color(savedDefense); // NOUVEAU
 const meColor = new THREE.Color('#ffffff');
 
 const globeMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(savedTheme), wireframe: true, transparent: true, opacity: 0.3 });
+// NOUVEAU : Matériaux spécifiques pour la planète Défense
+const defenseGlobeMat = new THREE.MeshBasicMaterial({ color: defenseColor, wireframe: true, transparent: true, opacity: 0.3 });
+const defenseSpriteMat = new THREE.SpriteMaterial({ map: haloTexture, color: defenseColor, blending: THREE.AdditiveBlending, depthWrite: false });
+const defenseLineMat = new THREE.LineBasicMaterial({ color: defenseColor, transparent: true, opacity: 0.4 });
+
 const activeSpriteMat = new THREE.SpriteMaterial({ map: haloTexture, color: activeColor, blending: THREE.AdditiveBlending, depthWrite: false });
 const inactiveSpriteMat = new THREE.SpriteMaterial({ map: haloTexture, color: inactiveColor, blending: THREE.AdditiveBlending, depthWrite: false });
 const meSpriteMat = new THREE.SpriteMaterial({ map: haloTexture, color: meColor, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -109,12 +112,14 @@ const inactiveLineMat = new THREE.LineBasicMaterial({ color: inactiveColor, tran
 const solarSystem = {}; 
 let currentPlanetId = 'main'; 
 
-function createSystem(id, radius, isMain = false) {
+function createSystem(id, radius, isMain = false, type = 'normal') {
     const geometry = new THREE.IcosahedronGeometry(radius, 2);
     const posAttr = geometry.attributes.position;
     const originalPos = posAttr.array.slice();
 
-    const globe = new THREE.Mesh(geometry, globeMaterial);
+    // Applique le bon matériel selon le type
+    const mat = (type === 'defense') ? defenseGlobeMat : globeMaterial;
+    const globe = new THREE.Mesh(geometry, mat);
     const nodesGroup = new THREE.Group();
     globe.add(nodesGroup); 
 
@@ -129,7 +134,7 @@ function createSystem(id, radius, isMain = false) {
         globe.position.set(Math.cos(angle) * orbitRadius, 0, Math.sin(angle) * orbitRadius);
     }
 
-    solarSystem[id] = { globe, nodesGroup, posAttr, originalPos, pivot, radius, deviceCount: 0, id: id, signals: [] };
+    solarSystem[id] = { globe, nodesGroup, posAttr, originalPos, pivot, radius, deviceCount: 0, id: id, type: type, signals: [] };
     return solarSystem[id];
 }
 
@@ -145,13 +150,14 @@ fetch('https://api.ipify.org?format=json')
     .then(data => { meSprite.userData.ip = `${data.ip} (Pub)`; meSprite.userData.geo = 'En Ligne'; })
     .catch(() => { meSprite.userData.ip = 'Local'; });
 
-window.addPlanet = function(systemId) {
+// NOUVEAU : Prise en compte du type (defense ou normal)
+window.addPlanet = function(systemId, type = 'normal') {
     if (!solarSystem[systemId]) {
-        const sys = createSystem(systemId, 2.5, false);
+        const sys = createSystem(systemId, 2.5, false, type);
         const netSprite = new THREE.Sprite(meSpriteMat);
         netSprite.scale.set(2, 2, 1);
         netSprite.userData = {
-            isMe: true, type: 'host', systemId: systemId, ip: systemId, host: 'RÉSEAU LOCAL', mac: 'Infrastructure', status: 'SCAN EN COURS...', geo: '0 Appareil(s)', ports: '-'
+            isMe: true, type: 'host', systemId: systemId, ip: systemId, host: type === 'defense' ? 'BOUCLIER ACTIF' : 'RÉSEAU LOCAL', mac: 'Infrastructure', status: 'MONITORING...', geo: '0 Alerte(s)', ports: '-'
         };
         sys.nodesGroup.add(netSprite);
         sys.netSprite = netSprite; 
@@ -160,7 +166,17 @@ window.addPlanet = function(systemId) {
 
 window.addNode = function(targetSystemId, ip, status = 'active', geo = 'Inconnue', ports = 'Aucun', host = 'Inconnu', mac = 'Inconnue') {
     const sys = solarSystem[targetSystemId] || solarSystem['main'];
-    const sprite = new THREE.Sprite(status === 'active' ? activeSpriteMat : inactiveSpriteMat);
+    
+    // NOUVEAU : Matériaux de la planète Défense
+    let sMat = status === 'active' ? activeSpriteMat : inactiveSpriteMat;
+    let lMat = status === 'active' ? activeLineMat : inactiveLineMat;
+    
+    if (sys.type === 'defense' && status === 'active') {
+        sMat = defenseSpriteMat;
+        lMat = defenseLineMat;
+    }
+
+    const sprite = new THREE.Sprite(sMat);
     sprite.scale.set(1.5, 1.5, 1); 
     sprite.userData = { isMe: false, type: 'host', systemId: targetSystemId, ip: ip, host: host, mac: mac, status: status, geo: geo, ports: ports };
 
@@ -171,7 +187,7 @@ window.addNode = function(targetSystemId, ip, status = 'active', geo = 'Inconnue
     const surfacePos = new THREE.Vector3(sys.radius * Math.sin(phi) * Math.cos(theta), sys.radius * Math.sin(phi) * Math.sin(theta), sys.radius * Math.cos(phi));
     const outerPos = surfacePos.clone().multiplyScalar(1.15);
     const lineGeo = new THREE.BufferGeometry().setFromPoints([surfacePos, outerPos]);
-    const line = new THREE.Line(lineGeo, status === 'active' ? activeLineMat : inactiveLineMat);
+    const line = new THREE.Line(lineGeo, lMat);
 
     sprite.position.copy(outerPos);
     sys.nodesGroup.add(line);
@@ -179,8 +195,7 @@ window.addNode = function(targetSystemId, ip, status = 'active', geo = 'Inconnue
 
     if (sys.netSprite) {
         sys.deviceCount++;
-        sys.netSprite.userData.geo = `${sys.deviceCount} Appareil(s) trouvé(s)`;
-        sys.netSprite.userData.status = 'EN LIGNE';
+        sys.netSprite.userData.geo = `${sys.deviceCount} Entrée(s) détéctée(s)`;
     }
 }
 
@@ -207,11 +222,12 @@ window.addEventListener('dblclick', () => {
     }
 });
 
+// --- NOUVEAU : SYSTÈME DE BLOCAGE AU CLAVIER ---
 window.addEventListener('keydown', (e) => {
+    // Navigation aux flèches
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         const sys = solarSystem[currentPlanetId];
         if (!sys) return;
-        // CORRECTION : On ne cible QUE les vrais appareils, pas les impulsions lumineuses !
         const hosts = sys.nodesGroup.children.filter(c => c.userData && c.userData.type === 'host');
         if (hosts.length === 0) return;
 
@@ -224,7 +240,21 @@ window.addEventListener('keydown', (e) => {
         focusedNode = hosts[focusIndex];
         updateTooltipContent(focusedNode.userData);
     }
+    
+    // Blocage (Touche B)
+    if (e.key.toLowerCase() === 'b') {
+        const targetNode = focusedNode || hoveredNode;
+        if (targetNode && !targetNode.userData.isMe) {
+            if (window.blockIp) window.blockIp(targetNode.userData.ip);
+            
+            // Mise à jour visuelle instantanée en rouge
+            targetNode.userData.status = 'BLOQUÉ (DROP)';
+            targetNode.material = inactiveSpriteMat; 
+            updateTooltipContent(targetNode.userData);
+        }
+    }
 });
+// -----------------------------------------------
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2(-2, -2); 
@@ -236,6 +266,7 @@ const tooltipMac = document.getElementById('tooltip-mac');
 const tooltipStatus = document.getElementById('tooltip-status');
 const tooltipGeo = document.getElementById('tooltip-geo');
 const tooltipPorts = document.getElementById('tooltip-ports');
+const tooltipBlockHint = document.getElementById('tooltip-block-hint'); // NOUVEAU
 
 let hoveredNode = null; 
 
@@ -243,14 +274,19 @@ function updateTooltipContent(data) {
     tooltipIp.innerText = data.ip; tooltipHost.innerText = data.host; 
     tooltipMac.innerText = data.mac || 'Inconnue'; 
     tooltipGeo.innerText = data.geo; tooltipPorts.innerText = data.ports;
+    
     if (data.isMe) {
-        tooltipHeader.innerText = data.host === 'RÉSEAU LOCAL' ? "INFRASTRUCTURE DÉTECTÉE" : "ACCÈS SYSTÈME SÉCURISÉ";
+        tooltipHeader.innerText = data.host === 'BOUCLIER ACTIF' ? "SYSTÈME DE DÉFENSE" : (data.host === 'RÉSEAU LOCAL' ? "INFRASTRUCTURE DÉTECTÉE" : "ACCÈS SYSTÈME SÉCURISÉ");
         tooltipStatus.innerText = data.status; tooltipStatus.style.color = "#ffffff"; tooltip.style.borderColor = "#ffffff";
+        tooltipBlockHint.innerText = ""; // Pas de blocage sur nos systèmes
     } else {
         tooltipHeader.innerText = "CIBLE DÉTECTÉE";
         tooltipStatus.innerText = data.status.toUpperCase();
-        const statusColor = data.status === 'active' ? '#' + activeColor.getHexString() : '#' + inactiveColor.getHexString();
+        const statusColor = data.status.includes('BLOQUÉ') ? '#' + inactiveColor.getHexString() : (data.systemId === 'defense' ? '#' + defenseColor.getHexString() : '#' + activeColor.getHexString());
         tooltipStatus.style.color = statusColor; tooltip.style.borderColor = statusColor;
+        
+        // Affiche l'indication de blocage si la cible n'est pas déjà bloquée
+        tooltipBlockHint.innerText = data.status.includes('BLOQUÉ') ? "" : "[ B ] POUR BLOQUER L'IP";
     }
     tooltip.style.display = 'block';
 }
@@ -266,7 +302,6 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Écouteurs de l'interface et synchronisation des couleurs des atomes
 document.getElementById('settings-btn').addEventListener('click', () => { const panel = document.getElementById('settings-panel'); panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'; });
 document.getElementById('speed-slider').addEventListener('input', (e) => { globalSpeed = parseFloat(e.target.value); localStorage.setItem('cyber_speed', globalSpeed); });
 document.getElementById('amplitude-slider').addEventListener('input', (e) => { globalAmplitude = parseFloat(e.target.value); localStorage.setItem('cyber_amplitude', globalAmplitude); });
@@ -274,13 +309,18 @@ document.getElementById('color-theme').addEventListener('input', (e) => {
     globeMaterial.color.set(e.target.value); 
     atomCoresMat.forEach(m => m.color.set(e.target.value));
     atomOrbitsMat.forEach(m => m.color.set(e.target.value));
+    activeSpriteMat.color.set(e.target.value); 
     document.body.style.color = e.target.value; 
     localStorage.setItem('cyber_theme', e.target.value); 
 });
-document.getElementById('color-active').addEventListener('input', (e) => { 
-    activeColor.set(e.target.value); 
-    localStorage.setItem('cyber_active', e.target.value); 
+document.getElementById('color-defense').addEventListener('input', (e) => { // NOUVEAU
+    defenseColor.set(e.target.value); 
+    defenseGlobeMat.color.set(e.target.value);
+    defenseSpriteMat.color.set(e.target.value);
+    defenseLineMat.color.set(e.target.value);
+    localStorage.setItem('cyber_defense', e.target.value); 
 });
+document.getElementById('color-active').addEventListener('input', (e) => { activeColor.set(e.target.value); localStorage.setItem('cyber_active', e.target.value); });
 document.getElementById('color-inactive').addEventListener('input', (e) => { inactiveColor.set(e.target.value); localStorage.setItem('cyber_inactive', e.target.value); });
 
 function animate() {
@@ -290,7 +330,6 @@ function animate() {
     starField.rotation.y += globalSpeed / 10;
     starField.rotation.x += globalSpeed / 20;
 
-    // Animation élégante des atomes
     Object.values(atomsGroup.children).forEach(a => {
         a.rotation.y += a.userData.orbitSpeed;
         a.rotation.x += a.userData.orbitSpeed / 2;
@@ -302,7 +341,6 @@ function animate() {
     });
 
     Object.values(solarSystem).forEach(sys => {
-        // Déformation
         for (let i = 0; i < sys.posAttr.count; i++) {
             const vx = sys.originalPos[i * 3];
             const vy = sys.originalPos[i * 3 + 1];
@@ -316,31 +354,24 @@ function animate() {
         sys.globe.rotation.x += globalSpeed / 4;
         if (sys.globe.position.x !== 0) { sys.pivot.rotation.y += globalSpeed / 5; }
 
-        // --- NOUVEAU : SYSTÈME DE SIGNAUX RÉSEAUX (IMPULSIONS) ---
         const hosts = sys.nodesGroup.children.filter(c => c.userData && c.userData.type === 'host' && !c.userData.isMe);
         
-        // Apparition aléatoire d'un signal vers un noeud actif
         if (hosts.length > 0 && Math.random() < 0.05) {
             const target = hosts[Math.floor(Math.random() * hosts.length)];
-            const signal = new THREE.Sprite(activeSpriteMat);
+            // Le signal prend la couleur du thème, sauf si c'est la planète défense
+            const sigMat = sys.type === 'defense' ? defenseSpriteMat : activeSpriteMat;
+            const signal = new THREE.Sprite(sigMat);
             signal.scale.set(0.6, 0.6, 1);
-            signal.position.set(0,0,0); // Part du centre
+            signal.position.set(0,0,0); 
             sys.nodesGroup.add(signal);
             sys.signals.push({ sprite: signal, targetPos: target.position.clone(), progress: 0 });
         }
 
-        // Déplacement du signal le long de la ligne
         for (let i = sys.signals.length - 1; i >= 0; i--) {
             const sig = sys.signals[i];
-            sig.progress += 0.02 + (globalSpeed * 5); // Vitesse du signal
-            
+            sig.progress += 0.02 + (globalSpeed * 5); 
             sig.sprite.position.copy(new THREE.Vector3(0,0,0).lerp(sig.targetPos, sig.progress));
-            
-            // Effet de "fade out" à la fin du transfert
-            if (sig.progress > 0.8) {
-                sig.sprite.material.opacity = (1 - sig.progress) * 5;
-            }
-
+            if (sig.progress > 0.8) sig.sprite.material.opacity = (1 - sig.progress) * 5;
             if (sig.progress >= 1) {
                 sys.nodesGroup.remove(sig.sprite);
                 sys.signals.splice(i, 1);
@@ -362,7 +393,6 @@ function animate() {
     } else {
         raycaster.setFromCamera(mouse, camera);
         let allHalos = [];
-        // Le raycaster ignore les impulsions, il ne cherche que les hôtes
         Object.values(solarSystem).forEach(sys => { allHalos = allHalos.concat(sys.nodesGroup.children.filter(child => child.userData && child.userData.type === 'host')); });
         const intersects = raycaster.intersectObjects(allHalos);
 

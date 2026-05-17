@@ -19,8 +19,8 @@
         
         <div class="control-panel">
             <input type="text" id="ip-input" placeholder="Cible (ex: gemini.com ou 192.168.1.0/24)">
-            <button id="add-btn">SCANNER & AJOUTER</button>
-        </div>
+            <button id="add-btn">SCANNER</button>
+            <button id="defense-btn">BOUCLIER [OFF]</button> </div>
     </div>
 
     <div id="settings-btn">⚙️</div>
@@ -31,11 +31,12 @@
         <input type="range" id="speed-slider" min="0" max="0.01" step="0.0005" value="0.002">
         <label>Intensité des ondes :</label>
         <input type="range" id="amplitude-slider" min="0" max="0.5" step="0.01" value="0.12">
-        <label>Couleur thème :</label>
+        <label>Couleur Thème :</label>
         <input type="color" id="color-theme" value="#00aaff">
-        <label>Cibles actives :</label>
+        <label>Couleur Défense :</label> <input type="color" id="color-defense" value="#ff00ff">
+        <label>Cibles Actives :</label>
         <input type="color" id="color-active" value="#00ffcc">
-        <label>Cibles inactives :</label>
+        <label>Cibles Inactives :</label>
         <input type="color" id="color-inactive" value="#ff3232">
     </div>
     
@@ -46,17 +47,78 @@
         <div class="tooltip-row"><span class="label">MAC :</span> <span id="tooltip-mac" style="color: #ffaa00;">---</span></div> 
         <div class="tooltip-row"><span class="label">Statut :</span> <span id="tooltip-status">---</span></div>
         <div class="tooltip-row"><span class="label">Détails :</span> <span id="tooltip-geo">---</span></div>
-        <div class="tooltip-row"><span class="label">Ports :</span> <span id="tooltip-ports">---</span></div>
+        <div class="tooltip-row"><span class="label">Ports/Info :</span> <span id="tooltip-ports">---</span></div>
+        <div class="tooltip-row" style="margin-top: 10px; text-align: center;"><span id="tooltip-block-hint" style="color: #ff3232; font-weight: bold; font-size: 1rem; letter-spacing: 2px;"></span></div>
     </div>
 
     <div id="canvas-container"></div> 
     <script type="module" src="scene.js"></script>
 
     <script>
-        const { exec } = require('child_process');
+        const { exec, spawn } = require('child_process');
         const dnsNative = require('dns'); 
         const dns = require('dns').promises;
         const net = require('net');
+
+        // --- NOUVEAU : LOGIQUE DE DÉFENSE (IDS + FIREWALL) ---
+        let defenseActive = false;
+        let defenseProcess = null;
+        const knownAttackers = new Set();
+
+        document.getElementById('defense-btn').addEventListener('click', () => {
+            const btn = document.getElementById('defense-btn');
+            
+            if (!defenseActive) {
+                defenseActive = true;
+                btn.innerText = "BOUCLIER [ON]";
+                btn.classList.add('active');
+
+                // 1. Création de la planète spéciale Défense
+                if (window.addPlanet) window.addPlanet('defense', 'defense');
+
+                // 2. Lancement de TCPDUMP pour sniffer les connexions entrantes (-Q in)
+                defenseProcess = spawn('bash', ['-c', 'tcpdump -l -n -i any -Q in not src net 127.0.0.0/8']);
+
+                defenseProcess.stdout.on('data', (data) => {
+                    const lines = data.toString().split('\n');
+                    lines.forEach(line => {
+                        // Regex pour extraire l'IP source et les infos du paquet
+                        const match = line.match(/IP ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)(?:\.[0-9]+)? > [^:]+: (.*)/);
+                        if (match) {
+                            const srcIp = match[1];
+                            const info = match[2].substring(0, 35); // Coupe le texte pour l'affichage
+                            
+                            // On vérifie s'il n'est pas déjà dans notre Set (Anti-Doublon)
+                            if (!knownAttackers.has(srcIp)) {
+                                knownAttackers.add(srcIp);
+                                if (window.addNode) {
+                                    window.addNode('defense', srcIp, 'active', 'Menace Externe', info, 'Alerte IDS', 'Sniffing...');
+                                }
+                            }
+                        }
+                    });
+                });
+
+            } else {
+                // Désactivation
+                defenseActive = false;
+                btn.innerText = "BOUCLIER [OFF]";
+                btn.classList.remove('active');
+                if (defenseProcess) {
+                    defenseProcess.kill();
+                    defenseProcess = null;
+                }
+            }
+        });
+
+        // 3. Fonction pour Bloquer une IP (Iptables) depuis scene.js
+        window.blockIp = function(ip) {
+            if (!/^[0-9\.]+$/.test(ip)) return; // Sécurité regex IP
+            exec(`iptables -A INPUT -s ${ip} -j DROP`, (err) => {
+                console.log(err ? "Erreur Iptables" : "IP Bloquée (DROP): " + ip);
+            });
+        }
+        // -----------------------------------------------------
 
         let loaderInterval;
         const frames = ['[ - ]', '[ \\ ]', '[ | ]', '[ / ]'];
