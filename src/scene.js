@@ -26,6 +26,20 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 container.appendChild(renderer.domElement);
 
+// --- NOUVEAU : POUSSIÈRE D'ÉTOILES / DONNÉES EN FOND ---
+const starsGeo = new THREE.BufferGeometry();
+const starsPos = [];
+for(let i=0; i<1000; i++) {
+    starsPos.push((Math.random() - 0.5) * 150); 
+    starsPos.push((Math.random() - 0.5) * 150); 
+    starsPos.push((Math.random() - 0.5) * 150); 
+}
+starsGeo.setAttribute('position', new THREE.Float32BufferAttribute(starsPos, 3));
+const starsMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.1, transparent: true, opacity: 0.3});
+const starField = new THREE.Points(starsGeo, starsMat);
+scene.add(starField);
+// -------------------------------------------------------
+
 function createWhiteHaloTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
@@ -52,7 +66,7 @@ const activeLineMat = new THREE.LineBasicMaterial({ color: activeColor, transpar
 const inactiveLineMat = new THREE.LineBasicMaterial({ color: inactiveColor, transparent: true, opacity: 0.6 });
 
 const solarSystem = {}; 
-let currentPlanetId = 'main'; // Garde en mémoire la planète sur laquelle on navigue
+let currentPlanetId = 'main'; 
 
 function createSystem(id, radius, isMain = false) {
     const geometry = new THREE.IcosahedronGeometry(radius, 2);
@@ -74,7 +88,17 @@ function createSystem(id, radius, isMain = false) {
         globe.position.set(Math.cos(angle) * orbitRadius, 0, Math.sin(angle) * orbitRadius);
     }
 
-    solarSystem[id] = { globe, nodesGroup, posAttr, originalPos, pivot, radius, deviceCount: 0, id: id };
+    // NOUVEAU : Création des paquets de trafic réseau
+    const packets = [];
+    const packetMat = new THREE.SpriteMaterial({ map: haloTexture, color: activeColor, blending: THREE.AdditiveBlending, depthWrite: false });
+    for(let i=0; i<4; i++) { // 4 points d'énergie par sphère
+        const sprite = new THREE.Sprite(packetMat);
+        sprite.scale.set(0.4, 0.4, 1);
+        nodesGroup.add(sprite); // Ils sont collés à la sphère
+        packets.push({ sprite: sprite, startIdx: 0, endIdx: 0, progress: 1 });
+    }
+
+    solarSystem[id] = { globe, nodesGroup, posAttr, originalPos, pivot, radius, deviceCount: 0, id: id, packets: packets };
     return solarSystem[id];
 }
 
@@ -133,18 +157,15 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.05;
 controls.enablePan = false; controls.minDistance = 2; controls.maxDistance = 60;
 
-// --- GESTION DU FOCUS ---
 let cameraTargetOrbit = null; 
 let focusedNode = null;
 let focusIndex = -1;
 
-// Si on clique ou si on "attrape" la scène pour la tourner, on annule le focus sur l'appareil
 controls.addEventListener('start', () => {
     focusedNode = null;
     tooltip.style.display = 'none';
 });
 
-// Double clic pour centrer sur une planète entière
 window.addEventListener('dblclick', () => {
     if (hoveredNode) {
         currentPlanetId = hoveredNode.userData.systemId;
@@ -155,13 +176,10 @@ window.addEventListener('dblclick', () => {
     }
 });
 
-// Navigation aux Flèches Directionnelles
 window.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         const sys = solarSystem[currentPlanetId];
         if (!sys) return;
-        
-        // On récupère tous les points brillants de cette planète
         const halos = sys.nodesGroup.children.filter(c => c.type === 'Sprite');
         if (halos.length === 0) return;
 
@@ -175,7 +193,6 @@ window.addEventListener('keydown', (e) => {
         updateTooltipContent(focusedNode.userData);
     }
 });
-// -----------------------
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2(-2, -2); 
@@ -190,12 +207,10 @@ const tooltipPorts = document.getElementById('tooltip-ports');
 
 let hoveredNode = null; 
 
-// Fonction pour remplir le Tooltip (évite de dupliquer le code)
 function updateTooltipContent(data) {
     tooltipIp.innerText = data.ip; tooltipHost.innerText = data.host; 
     tooltipMac.innerText = data.mac || 'Inconnue'; 
     tooltipGeo.innerText = data.geo; tooltipPorts.innerText = data.ports;
-    
     if (data.isMe) {
         tooltipHeader.innerText = data.host === 'RÉSEAU LOCAL' ? "INFRASTRUCTURE DÉTECTÉE" : "ACCÈS SYSTÈME SÉCURISÉ";
         tooltipStatus.innerText = data.status; tooltipStatus.style.color = "#ffffff"; tooltip.style.borderColor = "#ffffff";
@@ -219,7 +234,6 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Écouteurs de l'interface
 document.getElementById('settings-btn').addEventListener('click', () => { const panel = document.getElementById('settings-panel'); panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'; });
 document.getElementById('speed-slider').addEventListener('input', (e) => { globalSpeed = parseFloat(e.target.value); localStorage.setItem('cyber_speed', globalSpeed); });
 document.getElementById('amplitude-slider').addEventListener('input', (e) => { globalAmplitude = parseFloat(e.target.value); localStorage.setItem('cyber_amplitude', globalAmplitude); });
@@ -227,12 +241,16 @@ document.getElementById('color-theme').addEventListener('input', (e) => { globeM
 document.getElementById('color-active').addEventListener('input', (e) => { activeColor.set(e.target.value); localStorage.setItem('cyber_active', e.target.value); });
 document.getElementById('color-inactive').addEventListener('input', (e) => { inactiveColor.set(e.target.value); localStorage.setItem('cyber_inactive', e.target.value); });
 
-
 function animate() {
     requestAnimationFrame(animate);
     const time = Date.now() * 0.001;
 
+    // Rotation douce des étoiles de fond
+    starField.rotation.y += globalSpeed / 10;
+    starField.rotation.x += globalSpeed / 20;
+
     Object.values(solarSystem).forEach(sys => {
+        // Déformation
         for (let i = 0; i < sys.posAttr.count; i++) {
             const vx = sys.originalPos[i * 3];
             const vy = sys.originalPos[i * 3 + 1];
@@ -241,20 +259,38 @@ function animate() {
             sys.posAttr.setXYZ(i, vx + wave, vy + wave, vz + wave);
         }
         sys.posAttr.needsUpdate = true;
+        
         sys.globe.rotation.y += globalSpeed;
         sys.globe.rotation.x += globalSpeed / 4;
         
         if (sys.globe.position.x !== 0) { sys.pivot.rotation.y += globalSpeed / 5; }
+
+        // NOUVEAU : Animation de l'énergie (Trafic) sur le réseau
+        sys.packets.forEach(p => {
+            if(p.progress >= 1) {
+                p.progress = 0;
+                p.startIdx = p.endIdx;
+                p.endIdx = Math.floor(Math.random() * sys.posAttr.count); // Saute vers un nouveau noeud aléatoire
+            }
+            p.progress += 0.015; // Vitesse de déplacement du paquet
+            
+            // Calcul de la position actuelle entre les deux points de la sphère déformée
+            const sx = sys.posAttr.getX(p.startIdx), sy = sys.posAttr.getY(p.startIdx), sz = sys.posAttr.getZ(p.startIdx);
+            const ex = sys.posAttr.getX(p.endIdx), ey = sys.posAttr.getY(p.endIdx), ez = sys.posAttr.getZ(p.endIdx);
+            
+            p.sprite.position.set(
+                sx + (ex - sx) * p.progress,
+                sy + (ey - sy) * p.progress,
+                sz + (ez - sz) * p.progress
+            );
+        });
     });
 
-    // CIBLAGE CAMÉRA ET TOOLTIP
     if (focusedNode) {
-        // Focus Clavier actif : La caméra suit le petit point !
         const targetPos = new THREE.Vector3();
         focusedNode.getWorldPosition(targetPos);
         controls.target.lerp(targetPos, 0.1); 
         
-        // On projette la position 3D du point en 2D pour coller le Tooltip dessus
         const proj = targetPos.clone().project(camera);
         const x = (proj.x * 0.5 + 0.5) * window.innerWidth;
         const y = (proj.y * -0.5 + 0.5) * window.innerHeight;
@@ -262,7 +298,6 @@ function animate() {
         tooltip.style.top = (y + 15) + 'px';
         
     } else {
-        // Si pas de focus clavier, on gère la souris (Raycaster)
         raycaster.setFromCamera(mouse, camera);
         let allHalos = [];
         Object.values(solarSystem).forEach(sys => { allHalos = allHalos.concat(sys.nodesGroup.children.filter(child => child.type === 'Sprite')); });
@@ -272,7 +307,6 @@ function animate() {
             hoveredNode = intersects[0].object;
             updateTooltipContent(hoveredNode.userData);
             
-            // Le tooltip suit la souris
             const event = window.event;
             if(event) {
                 tooltip.style.left = event.clientX + 15 + 'px';
@@ -285,7 +319,6 @@ function animate() {
             document.body.style.cursor = 'default';
         }
 
-        // Focus de planète au double clic
         if (cameraTargetOrbit) {
             const targetPos = new THREE.Vector3();
             cameraTargetOrbit.getWorldPosition(targetPos);

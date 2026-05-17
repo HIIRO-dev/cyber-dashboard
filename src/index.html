@@ -16,8 +16,6 @@
 <body>
     <div id="ui-container">
         <h1>SATELLITE LINK // ONLINE</h1>
-        <p style="margin: 5px 0; font-size: 0.8rem; opacity: 0.7;">Astuce: Double-clic sur un point pour verrouiller la caméra. Double-clic dans l'espace pour réinitialiser.</p>
-        
         <div class="control-panel">
             <input type="text" id="ip-input" placeholder="Cible (ex: gemini.com ou 192.168.1.0/24)">
             <button id="add-btn">SCAN & AJOUTER</button>
@@ -59,6 +57,26 @@
         const dns = require('dns').promises;
         const net = require('net');
 
+        // Variables pour l'animation du bouton
+        let loaderInterval;
+        const frames = ['[ - ]', '[ \\ ]', '[ | ]', '[ / ]'];
+        let f = 0;
+
+        function startBtnAnimation(btn, text) {
+            clearInterval(loaderInterval);
+            btn.style.color = "#ffcc00";
+            loaderInterval = setInterval(() => {
+                btn.innerText = `${text} ${frames[f]}`;
+                f = (f + 1) % frames.length;
+            }, 100);
+        }
+
+        function stopBtnAnimation(btn) {
+            clearInterval(loaderInterval);
+            btn.innerText = "SCAN & AJOUTER";
+            btn.style.color = "currentColor"; 
+        }
+
         function checkPort(port, ip) {
             return new Promise((resolve) => {
                 const socket = new net.Socket();
@@ -82,13 +100,10 @@
             });
         }
 
-        // NOUVEAU : Fonction NMAP pour le Hostname
         function getNmapHostname(ip) {
             return new Promise((resolve) => {
-                // -sn fait un ping scan rapide qui résout les noms
                 exec(`nmap -sn ${ip}`, (err, stdout) => {
                     if (err || !stdout) return resolve(null);
-                    // Cherche la ligne "Nmap scan report for NOM (IP)"
                     const match = stdout.match(/Nmap scan report for ([^\s]+) \(/);
                     if (match && match[1]) resolve(match[1]);
                     else resolve(null);
@@ -107,16 +122,10 @@
                         let geo = 'Réseau Local';
                         
                         if (!forcedHost || forcedHost === 'Inconnu') {
-                            // 1. On tente NMAP en priorité !
                             const nmapHost = await getNmapHostname(targetIp);
-                            if (nmapHost) {
-                                host = nmapHost;
-                            } else {
-                                // 2. Fallback sur DNS natif si Nmap échoue
-                                try { 
-                                    const hostnames = await dns.reverse(targetIp); 
-                                    if (hostnames && hostnames.length > 0) host = hostnames[0]; 
-                                } catch(e) {}
+                            if (nmapHost) { host = nmapHost; } 
+                            else {
+                                try { const hostnames = await dns.reverse(targetIp); if (hostnames && hostnames.length > 0) host = hostnames[0]; } catch(e) {}
                             }
                         }
                         
@@ -155,13 +164,11 @@
             const btn = document.getElementById('add-btn');
             
             if (input.includes('/24')) {
-                btn.innerText = "CRÉATION SYSTÈME...";
-                btn.style.color = "#ffcc00"; 
-                
+                startBtnAnimation(btn, "SCAN RÉSEAU");
                 const baseIp = input.substring(0, input.lastIndexOf('.'));
+                
                 if (window.addPlanet) window.addPlanet(input);
 
-                btn.innerText = "SCAN DU RÉSEAU (1-2 MIN)...";
                 const ipsToScan = [];
                 for(let i = 1; i < 255; i++) ipsToScan.push(`${baseIp}.${i}`);
 
@@ -171,14 +178,12 @@
                     await Promise.all(chunk.map(ip => scanSingleTarget(ip, input))); 
                 }
 
-                btn.innerText = "SCAN & AJOUTER";
-                btn.style.color = "currentColor"; 
+                stopBtnAnimation(btn);
                 document.getElementById('ip-input').value = "";
                 return;
             }
 
-            btn.innerText = "ANALYSE DE LA CIBLE...";
-            btn.style.color = "#ffcc00"; 
+            startBtnAnimation(btn, "ANALYSE");
 
             dnsNative.lookup(input, async (err, address) => {
                 const targetIp = address || input;
@@ -187,8 +192,7 @@
                 
                 await scanSingleTarget(targetIp, 'main', hostToPass);
                 
-                btn.innerText = "SCAN & AJOUTER";
-                btn.style.color = "currentColor"; 
+                stopBtnAnimation(btn);
                 document.getElementById('ip-input').value = "";
             });
         });

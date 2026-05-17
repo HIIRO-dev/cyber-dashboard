@@ -1,12 +1,36 @@
 body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: linear-gradient(45deg, #020305, #081220, #030508, #051015); background-size: 400% 400%; animation: gradientMove 15s ease infinite; color: #00aaff; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
 @keyframes gradientMove { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
 #ui-container { position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none; }
-h1 { font-size: 1.2rem; text-shadow: 0 0 10px currentColor; margin: 0; opacity: 0.8; color: inherit; }
+
+/* NOUVEAU : Titre centré et stylisé */
+h1 { 
+    position: fixed; 
+    top: 20px; 
+    left: 50%; 
+    transform: translateX(-50%); 
+    font-size: 1.5rem; 
+    text-shadow: 0 0 15px currentColor; 
+    margin: 0; 
+    opacity: 0.9; 
+    color: inherit; 
+    letter-spacing: 5px;
+    z-index: 10;
+    pointer-events: none;
+}
+
 .control-panel { margin-top: 15px; pointer-events: auto; display: flex; gap: 10px; }
 #ip-input { background: rgba(3, 5, 8, 0.8); border: 1px solid currentColor; color: #fff; padding: 8px 12px; font-family: inherit; font-size: 1rem; outline: none; box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.1); }
 #add-btn { background: rgba(255, 255, 255, 0.1); border: 1px solid currentColor; color: currentColor; padding: 8px 15px; cursor: pointer; font-family: inherit; font-weight: bold; transition: all 0.3s ease; }
-#add-btn:hover { background: currentColor; color: #000; box-shadow: 0 0 15px currentColor; }
+
+/* NOUVEAU : Correction du bouton au survol (Glow au lieu de noir) */
+#add-btn:hover { 
+    background: rgba(255, 255, 255, 0.2); 
+    color: currentColor; 
+    box-shadow: 0 0 15px currentColor; 
+}
+
 #tooltip { position: absolute; background: rgba(3, 5, 8, 0.9); border: 1px solid currentColor; border-radius: 4px; padding: 12px 18px; color: #fff; font-family: inherit; font-size: 0.85rem; pointer-events: none; z-index: 100; box-shadow: 0 0 15px rgba(255, 255, 255, 0.15); backdrop-filter: blur(4px); width: 290px; }
 .tooltip-header { color: currentColor; font-weight: bold; border-bottom: 1px solid currentColor; padding-bottom: 6px; margin-bottom: 8px; font-size: 0.8rem; letter-spacing: 1px; }
 .tooltip-row { margin-bottom: 4px; }
