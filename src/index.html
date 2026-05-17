@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Cyber Dashboard - Jarvis Interface</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "../node_modules/three/build/three.module.js",
+          "three/addons/": "../node_modules/three/examples/jsm/"
+        }
+      }
+    </script>
+</head>
+<body>
+    <div id="ui-container">
+        <h1>SATELLITE LINK // ONLINE</h1>
+        <p style="margin: 5px 0; font-size: 0.8rem; opacity: 0.7;">Astuce: Double-clic sur un point pour verrouiller la caméra. Double-clic dans l'espace pour réinitialiser.</p>
+        
+        <div class="control-panel">
+            <input type="text" id="ip-input" placeholder="Cible (ex: gemini.com ou 192.168.1.0/24)">
+            <button id="add-btn">SCAN & AJOUTER</button>
+        </div>
+    </div>
+
+    <div id="settings-btn">⚙️</div>
+    
+    <div id="settings-panel" style="display: none;">
+        <h3>RÉGLAGES SYSTÈME</h3>
+        <label>Vitesse de rotation :</label>
+        <input type="range" id="speed-slider" min="0" max="0.01" step="0.0005" value="0.002">
+        <label>Intensité des ondes :</label>
+        <input type="range" id="amplitude-slider" min="0" max="0.5" step="0.01" value="0.12">
+        <label>Couleur - Globe & UI :</label>
+        <input type="color" id="color-theme" value="#00aaff">
+        <label>Couleur - Cible Active :</label>
+        <input type="color" id="color-active" value="#00ffcc">
+        <label>Couleur - Cible Inactive :</label>
+        <input type="color" id="color-inactive" value="#ff3232">
+    </div>
+    
+    <div id="tooltip" style="display: none;">
+        <div class="tooltip-header" id="tooltip-header-text">CIBLE DÉTECTÉE</div>
+        <div class="tooltip-row"><span class="label">IP :</span> <span id="tooltip-ip">---</span></div>
+        <div class="tooltip-row"><span class="label">Host :</span> <span id="tooltip-host">---</span></div>
+        <div class="tooltip-row"><span class="label">MAC :</span> <span id="tooltip-mac" style="color: #ffaa00;">---</span></div> 
+        <div class="tooltip-row"><span class="label">Statut :</span> <span id="tooltip-status">---</span></div>
+        <div class="tooltip-row"><span class="label">Détails :</span> <span id="tooltip-geo">---</span></div>
+        <div class="tooltip-row"><span class="label">Ports :</span> <span id="tooltip-ports">---</span></div>
+    </div>
+
+    <div id="canvas-container"></div> 
+    <script type="module" src="scene.js"></script>
+
+    <script>
+        const { exec } = require('child_process');
+        const dnsNative = require('dns'); 
+        const dns = require('dns').promises;
+        const net = require('net');
+
+        function checkPort(port, ip) {
+            return new Promise((resolve) => {
+                const socket = new net.Socket();
+                let status = 'closed';
+                socket.setTimeout(800);
+                socket.on('connect', () => { status = 'open'; socket.destroy(); });
+                socket.on('timeout', () => { socket.destroy(); });
+                socket.on('error', () => { socket.destroy(); });
+                socket.on('close', () => { resolve(status === 'open' ? port : null); });
+                socket.connect(port, ip);
+            });
+        }
+
+        function getMacAddress(ip) {
+            return new Promise((resolve) => {
+                exec(`arp -a ${ip}`, (err, stdout) => {
+                    if (err || !stdout) return resolve('Inconnue / Masquée');
+                    const macMatch = stdout.match(/([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})/);
+                    resolve(macMatch ? macMatch[0].replace(/-/g, ':').toUpperCase() : 'Inconnue / Hors LAN');
+                });
+            });
+        }
+
+        // NOUVEAU : Fonction NMAP pour le Hostname
+        function getNmapHostname(ip) {
+            return new Promise((resolve) => {
+                // -sn fait un ping scan rapide qui résout les noms
+                exec(`nmap -sn ${ip}`, (err, stdout) => {
+                    if (err || !stdout) return resolve(null);
+                    // Cherche la ligne "Nmap scan report for NOM (IP)"
+                    const match = stdout.match(/Nmap scan report for ([^\s]+) \(/);
+                    if (match && match[1]) resolve(match[1]);
+                    else resolve(null);
+                });
+            });
+        }
+
+        async function scanSingleTarget(targetIp, systemId = 'main', forcedHost = null) {
+            return new Promise((resolve) => {
+                const isWindows = process.platform === 'win32';
+                const command = isWindows ? `ping -n 1 -w 1000 ${targetIp}` : `ping -c 1 -W 1 ${targetIp}`;
+
+                exec(command, async (error, stdout) => {
+                    if (!error && (stdout.toLowerCase().includes('ttl=') || stdout.toLowerCase().includes('temps='))) {
+                        let host = forcedHost || 'Inconnu'; 
+                        let geo = 'Réseau Local';
+                        
+                        if (!forcedHost || forcedHost === 'Inconnu') {
+                            // 1. On tente NMAP en priorité !
+                            const nmapHost = await getNmapHostname(targetIp);
+                            if (nmapHost) {
+                                host = nmapHost;
+                            } else {
+                                // 2. Fallback sur DNS natif si Nmap échoue
+                                try { 
+                                    const hostnames = await dns.reverse(targetIp); 
+                                    if (hostnames && hostnames.length > 0) host = hostnames[0]; 
+                                } catch(e) {}
+                            }
+                        }
+                        
+                        let mac = await getMacAddress(targetIp);
+
+                        if (systemId === 'main') {
+                            try {
+                                const response = await fetch(`http://ip-api.com/json/${targetIp}`);
+                                const data = await response.json();
+                                if (data.status === 'success') {
+                                    geo = `${data.city}, ${data.country}`;
+                                    mac = 'Routé (WAN)'; 
+                                }
+                            } catch(e) {}
+                        }
+
+                        const portsToScan = [22, 80, 443, 3389];
+                        const openPorts = [];
+                        for (let p of portsToScan) {
+                            const res = await checkPort(p, targetIp);
+                            if (res) openPorts.push(res);
+                        }
+                        const ports = openPorts.length > 0 ? openPorts.join(', ') : 'Fermés';
+
+                        if (window.addNode) window.addNode(systemId, targetIp, 'active', geo, ports, host, mac);
+                    }
+                    resolve();
+                });
+            });
+        }
+
+        document.getElementById('add-btn').addEventListener('click', async () => {
+            const input = document.getElementById('ip-input').value.trim();
+            if (!input) return;
+
+            const btn = document.getElementById('add-btn');
+            
+            if (input.includes('/24')) {
+                btn.innerText = "CRÉATION SYSTÈME...";
+                btn.style.color = "#ffcc00"; 
+                
+                const baseIp = input.substring(0, input.lastIndexOf('.'));
+                if (window.addPlanet) window.addPlanet(input);
+
+                btn.innerText = "SCAN DU RÉSEAU (1-2 MIN)...";
+                const ipsToScan = [];
+                for(let i = 1; i < 255; i++) ipsToScan.push(`${baseIp}.${i}`);
+
+                const chunkSize = 20;
+                for (let i = 0; i < ipsToScan.length; i += chunkSize) {
+                    const chunk = ipsToScan.slice(i, i + chunkSize);
+                    await Promise.all(chunk.map(ip => scanSingleTarget(ip, input))); 
+                }
+
+                btn.innerText = "SCAN & AJOUTER";
+                btn.style.color = "currentColor"; 
+                document.getElementById('ip-input').value = "";
+                return;
+            }
+
+            btn.innerText = "ANALYSE DE LA CIBLE...";
+            btn.style.color = "#ffcc00"; 
+
+            dnsNative.lookup(input, async (err, address) => {
+                const targetIp = address || input;
+                const isDomain = /[a-zA-Z]/.test(input); 
+                const hostToPass = isDomain ? input : null;
+                
+                await scanSingleTarget(targetIp, 'main', hostToPass);
+                
+                btn.innerText = "SCAN & AJOUTER";
+                btn.style.color = "currentColor"; 
+                document.getElementById('ip-input').value = "";
+            });
+        });
+    </script>
+</body>
+</html>
