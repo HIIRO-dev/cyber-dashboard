@@ -26,7 +26,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 container.appendChild(renderer.domElement);
 
-// --- NOUVEAU : POUSSIÈRE D'ÉTOILES / DONNÉES EN FOND ---
 const starsGeo = new THREE.BufferGeometry();
 const starsPos = [];
 for(let i=0; i<1000; i++) {
@@ -38,7 +37,36 @@ starsGeo.setAttribute('position', new THREE.Float32BufferAttribute(starsPos, 3))
 const starsMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.1, transparent: true, opacity: 0.3});
 const starField = new THREE.Points(starsGeo, starsMat);
 scene.add(starField);
-// -------------------------------------------------------
+
+// --- NOUVEAU : STRUCTURES ATOMIQUES FLOTTANTES ---
+const atomsGroup = new THREE.Group();
+scene.add(atomsGroup);
+const neutronGeo = new THREE.IcosahedronGeometry(0.15, 1);
+const protonMat = new THREE.MeshBasicMaterial({color: 0xffaa00, transparent: true, opacity: 0.8});
+const neutronMat = new THREE.MeshBasicMaterial({color: 0x444444, transparent: true, opacity: 0.6});
+const electronGeo = new THREE.SphereGeometry(0.05, 8, 8);
+const electronMat = new THREE.MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: 0.9});
+
+for(let i=0; i<8; i++) {
+    const atom = new THREE.Group();
+    for(let j=0; j<4; j++) {
+        const isProton = Math.random() > 0.5;
+        const n = new THREE.Mesh(neutronGeo, isProton ? protonMat : neutronMat);
+        n.position.set((Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3);
+        atom.add(n);
+    }
+    const electrons = [];
+    for(let j=0; j<3; j++) {
+        const e = new THREE.Mesh(electronGeo, electronMat);
+        e.position.set(0.6, 0, 0);
+        atom.add(e);
+        electrons.push({mesh: e, angle: Math.random()*Math.PI*2, orbit: 0.6 + Math.random()*0.3});
+    }
+    atom.position.set((Math.random()-0.5)*60, (Math.random()-0.5)*60, (Math.random()-0.5)*30);
+    atom.userData = {electrons: electrons, orbitSpeed: 0.001 + Math.random()*0.005};
+    atomsGroup.add(atom);
+}
+// ---------------------------------------------------
 
 function createWhiteHaloTexture() {
     const canvas = document.createElement('canvas');
@@ -88,13 +116,13 @@ function createSystem(id, radius, isMain = false) {
         globe.position.set(Math.cos(angle) * orbitRadius, 0, Math.sin(angle) * orbitRadius);
     }
 
-    // NOUVEAU : Création des paquets de trafic réseau
     const packets = [];
     const packetMat = new THREE.SpriteMaterial({ map: haloTexture, color: activeColor, blending: THREE.AdditiveBlending, depthWrite: false });
-    for(let i=0; i<4; i++) { // 4 points d'énergie par sphère
+    for(let i=0; i<4; i++) { 
         const sprite = new THREE.Sprite(packetMat);
         sprite.scale.set(0.4, 0.4, 1);
-        nodesGroup.add(sprite); // Ils sont collés à la sphère
+        sprite.userData = {type: 'packet'}; // NOUVEAU: Identification des paquets
+        nodesGroup.add(sprite); 
         packets.push({ sprite: sprite, startIdx: 0, endIdx: 0, progress: 1 });
     }
 
@@ -106,7 +134,8 @@ createSystem('main', 5, true);
 
 const meSprite = new THREE.Sprite(meSpriteMat);
 meSprite.scale.set(2, 2, 1);
-meSprite.userData = { isMe: true, systemId: 'main', ip: 'Recherche IP...', host: 'Localhost', mac: 'Système', status: 'ONLINE', geo: '-', ports: '-' };
+// NOUVEAU: Identification hôte pour la navigation
+meSprite.userData = { isMe: true, type: 'host', systemId: 'main', ip: 'Recherche IP...', host: 'Localhost', mac: 'Système', status: 'ONLINE', geo: '-', ports: '-' };
 solarSystem['main'].nodesGroup.add(meSprite);
 
 fetch('https://api.ipify.org?format=json')
@@ -131,7 +160,8 @@ window.addNode = function(targetSystemId, ip, status = 'active', geo = 'Inconnue
     const sys = solarSystem[targetSystemId] || solarSystem['main'];
     const sprite = new THREE.Sprite(status === 'active' ? activeSpriteMat : inactiveSpriteMat);
     sprite.scale.set(1.5, 1.5, 1); 
-    sprite.userData = { isMe: false, systemId: targetSystemId, ip: ip, host: host, mac: mac, status: status, geo: geo, ports: ports };
+    // NOUVEAU: Identification hôte
+    sprite.userData = { isMe: false, type: 'host', systemId: targetSystemId, ip: ip, host: host, mac: mac, status: status, geo: geo, ports: ports };
 
     const u = Math.random();
     const v = Math.random();
@@ -180,16 +210,17 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         const sys = solarSystem[currentPlanetId];
         if (!sys) return;
-        const halos = sys.nodesGroup.children.filter(c => c.type === 'Sprite');
-        if (halos.length === 0) return;
+        // CORRECTION: Filtrer uniquement les hôtes, pas les paquets
+        const hosts = sys.nodesGroup.children.filter(c => c.userData && c.userData.type === 'host');
+        if (hosts.length === 0) return;
 
         if (e.key === 'ArrowRight') focusIndex++;
         if (e.key === 'ArrowLeft') focusIndex--;
         
-        if (focusIndex >= halos.length) focusIndex = 0;
-        if (focusIndex < 0) focusIndex = halos.length - 1;
+        if (focusIndex >= hosts.length) focusIndex = 0;
+        if (focusIndex < 0) focusIndex = hosts.length - 1;
 
-        focusedNode = halos[focusIndex];
+        focusedNode = hosts[focusIndex];
         updateTooltipContent(focusedNode.userData);
     }
 });
@@ -237,7 +268,12 @@ window.addEventListener('resize', () => {
 document.getElementById('settings-btn').addEventListener('click', () => { const panel = document.getElementById('settings-panel'); panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'; });
 document.getElementById('speed-slider').addEventListener('input', (e) => { globalSpeed = parseFloat(e.target.value); localStorage.setItem('cyber_speed', globalSpeed); });
 document.getElementById('amplitude-slider').addEventListener('input', (e) => { globalAmplitude = parseFloat(e.target.value); localStorage.setItem('cyber_amplitude', globalAmplitude); });
-document.getElementById('color-theme').addEventListener('input', (e) => { globeMaterial.color.set(e.target.value); document.body.style.color = e.target.value; localStorage.setItem('cyber_theme', e.target.value); });
+document.getElementById('color-theme').addEventListener('input', (e) => { 
+    globeMaterial.color.set(e.target.value); 
+    activeSpriteMat.color.set(e.target.value); // Synchroniser la couleur du signal lumineux (paquets)
+    document.body.style.color = e.target.value; 
+    localStorage.setItem('cyber_theme', e.target.value); 
+});
 document.getElementById('color-active').addEventListener('input', (e) => { activeColor.set(e.target.value); localStorage.setItem('cyber_active', e.target.value); });
 document.getElementById('color-inactive').addEventListener('input', (e) => { inactiveColor.set(e.target.value); localStorage.setItem('cyber_inactive', e.target.value); });
 
@@ -245,12 +281,21 @@ function animate() {
     requestAnimationFrame(animate);
     const time = Date.now() * 0.001;
 
-    // Rotation douce des étoiles de fond
     starField.rotation.y += globalSpeed / 10;
     starField.rotation.x += globalSpeed / 20;
 
+    // Animation des atomes flottants
+    Object.values(atomsGroup.children).forEach(a => {
+        a.rotation.y += a.userData.orbitSpeed;
+        a.position.y += Math.sin(time + a.position.x)*0.01;
+        // Electrons en orbite
+        a.userData.electrons.forEach(e => {
+            e.angle += 0.05;
+            e.mesh.position.set(Math.cos(e.angle)*e.orbit, Math.sin(e.angle)*e.orbit, 0);
+        });
+    });
+
     Object.values(solarSystem).forEach(sys => {
-        // Déformation
         for (let i = 0; i < sys.posAttr.count; i++) {
             const vx = sys.originalPos[i * 3];
             const vy = sys.originalPos[i * 3 + 1];
@@ -265,16 +310,14 @@ function animate() {
         
         if (sys.globe.position.x !== 0) { sys.pivot.rotation.y += globalSpeed / 5; }
 
-        // NOUVEAU : Animation de l'énergie (Trafic) sur le réseau
         sys.packets.forEach(p => {
             if(p.progress >= 1) {
                 p.progress = 0;
                 p.startIdx = p.endIdx;
-                p.endIdx = Math.floor(Math.random() * sys.posAttr.count); // Saute vers un nouveau noeud aléatoire
+                p.endIdx = Math.floor(Math.random() * sys.posAttr.count); 
             }
-            p.progress += 0.015; // Vitesse de déplacement du paquet
+            p.progress += 0.015; 
             
-            // Calcul de la position actuelle entre les deux points de la sphère déformée
             const sx = sys.posAttr.getX(p.startIdx), sy = sys.posAttr.getY(p.startIdx), sz = sys.posAttr.getZ(p.startIdx);
             const ex = sys.posAttr.getX(p.endIdx), ey = sys.posAttr.getY(p.endIdx), ez = sys.posAttr.getZ(p.endIdx);
             

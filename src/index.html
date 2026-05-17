@@ -15,10 +15,11 @@
 </head>
 <body>
     <div id="ui-container">
-        <h1>SATELLITE LINK // ONLINE</h1>
+        <h1>SATELLITE LINK // EN LIGNE</h1>
+        
         <div class="control-panel">
             <input type="text" id="ip-input" placeholder="Cible (ex: gemini.com ou 192.168.1.0/24)">
-            <button id="add-btn">SCAN & AJOUTER</button>
+            <button id="add-btn">SCANNER & AJOUTER</button>
         </div>
     </div>
 
@@ -30,11 +31,11 @@
         <input type="range" id="speed-slider" min="0" max="0.01" step="0.0005" value="0.002">
         <label>Intensité des ondes :</label>
         <input type="range" id="amplitude-slider" min="0" max="0.5" step="0.01" value="0.12">
-        <label>Couleur - Globe & UI :</label>
+        <label>Couleur thème :</label>
         <input type="color" id="color-theme" value="#00aaff">
-        <label>Couleur - Cible Active :</label>
+        <label>Cibles actives :</label>
         <input type="color" id="color-active" value="#00ffcc">
-        <label>Couleur - Cible Inactive :</label>
+        <label>Cibles inactives :</label>
         <input type="color" id="color-inactive" value="#ff3232">
     </div>
     
@@ -57,7 +58,6 @@
         const dns = require('dns').promises;
         const net = require('net');
 
-        // Variables pour l'animation du bouton
         let loaderInterval;
         const frames = ['[ - ]', '[ \\ ]', '[ | ]', '[ / ]'];
         let f = 0;
@@ -73,7 +73,7 @@
 
         function stopBtnAnimation(btn) {
             clearInterval(loaderInterval);
-            btn.innerText = "SCAN & AJOUTER";
+            btn.innerText = "SCANNER & AJOUTER";
             btn.style.color = "currentColor"; 
         }
 
