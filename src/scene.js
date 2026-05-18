@@ -5,7 +5,7 @@ let globalSpeed = localStorage.getItem('cyber_speed') ? parseFloat(localStorage.
 let globalAmplitude = localStorage.getItem('cyber_amplitude') ? parseFloat(localStorage.getItem('cyber_amplitude')) : 0.12;
 
 const savedTheme = localStorage.getItem('cyber_theme') || '#00aaff';
-const savedDefense = localStorage.getItem('cyber_defense') || '#ff00ff'; // NOUVEAU
+const savedDefense = localStorage.getItem('cyber_defense') || '#ff00ff';
 const savedActive = localStorage.getItem('cyber_active') || '#00ffcc';
 const savedInactive = localStorage.getItem('cyber_inactive') || '#ff3232';
 
@@ -13,7 +13,7 @@ document.body.style.color = savedTheme;
 document.getElementById('speed-slider').value = globalSpeed;
 document.getElementById('amplitude-slider').value = globalAmplitude;
 document.getElementById('color-theme').value = savedTheme;
-document.getElementById('color-defense').value = savedDefense; // NOUVEAU
+document.getElementById('color-defense').value = savedDefense; 
 document.getElementById('color-active').value = savedActive;
 document.getElementById('color-inactive').value = savedInactive;
 
@@ -94,11 +94,10 @@ const haloTexture = createWhiteHaloTexture();
 
 const activeColor = new THREE.Color(savedActive);
 const inactiveColor = new THREE.Color(savedInactive);
-const defenseColor = new THREE.Color(savedDefense); // NOUVEAU
+const defenseColor = new THREE.Color(savedDefense); 
 const meColor = new THREE.Color('#ffffff');
 
 const globeMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(savedTheme), wireframe: true, transparent: true, opacity: 0.3 });
-// NOUVEAU : Matériaux spécifiques pour la planète Défense
 const defenseGlobeMat = new THREE.MeshBasicMaterial({ color: defenseColor, wireframe: true, transparent: true, opacity: 0.3 });
 const defenseSpriteMat = new THREE.SpriteMaterial({ map: haloTexture, color: defenseColor, blending: THREE.AdditiveBlending, depthWrite: false });
 const defenseLineMat = new THREE.LineBasicMaterial({ color: defenseColor, transparent: true, opacity: 0.4 });
@@ -117,7 +116,6 @@ function createSystem(id, radius, isMain = false, type = 'normal') {
     const posAttr = geometry.attributes.position;
     const originalPos = posAttr.array.slice();
 
-    // Applique le bon matériel selon le type
     const mat = (type === 'defense') ? defenseGlobeMat : globeMaterial;
     const globe = new THREE.Mesh(geometry, mat);
     const nodesGroup = new THREE.Group();
@@ -145,12 +143,12 @@ meSprite.scale.set(2, 2, 1);
 meSprite.userData = { isMe: true, type: 'host', systemId: 'main', ip: 'Recherche IP...', host: 'Localhost', mac: 'Système', status: 'ONLINE', geo: '-', ports: '-' };
 solarSystem['main'].nodesGroup.add(meSprite);
 
-fetch('https://api.ipify.org?format=json')
+// CORRECTION : api4 au lieu de api pour forcer l'IPv4
+fetch('https://api4.ipify.org?format=json')
     .then(r => r.json())
     .then(data => { meSprite.userData.ip = `${data.ip} (Pub)`; meSprite.userData.geo = 'En Ligne'; })
     .catch(() => { meSprite.userData.ip = 'Local'; });
 
-// NOUVEAU : Prise en compte du type (defense ou normal)
 window.addPlanet = function(systemId, type = 'normal') {
     if (!solarSystem[systemId]) {
         const sys = createSystem(systemId, 2.5, false, type);
@@ -167,7 +165,6 @@ window.addPlanet = function(systemId, type = 'normal') {
 window.addNode = function(targetSystemId, ip, status = 'active', geo = 'Inconnue', ports = 'Aucun', host = 'Inconnu', mac = 'Inconnue') {
     const sys = solarSystem[targetSystemId] || solarSystem['main'];
     
-    // NOUVEAU : Matériaux de la planète Défense
     let sMat = status === 'active' ? activeSpriteMat : inactiveSpriteMat;
     let lMat = status === 'active' ? activeLineMat : inactiveLineMat;
     
@@ -222,9 +219,7 @@ window.addEventListener('dblclick', () => {
     }
 });
 
-// --- NOUVEAU : SYSTÈME DE BLOCAGE AU CLAVIER ---
 window.addEventListener('keydown', (e) => {
-    // Navigation aux flèches
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         const sys = solarSystem[currentPlanetId];
         if (!sys) return;
@@ -241,20 +236,16 @@ window.addEventListener('keydown', (e) => {
         updateTooltipContent(focusedNode.userData);
     }
     
-    // Blocage (Touche B)
     if (e.key.toLowerCase() === 'b') {
         const targetNode = focusedNode || hoveredNode;
         if (targetNode && !targetNode.userData.isMe) {
             if (window.blockIp) window.blockIp(targetNode.userData.ip);
-            
-            // Mise à jour visuelle instantanée en rouge
             targetNode.userData.status = 'BLOQUÉ (DROP)';
             targetNode.material = inactiveSpriteMat; 
             updateTooltipContent(targetNode.userData);
         }
     }
 });
-// -----------------------------------------------
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2(-2, -2); 
@@ -266,7 +257,7 @@ const tooltipMac = document.getElementById('tooltip-mac');
 const tooltipStatus = document.getElementById('tooltip-status');
 const tooltipGeo = document.getElementById('tooltip-geo');
 const tooltipPorts = document.getElementById('tooltip-ports');
-const tooltipBlockHint = document.getElementById('tooltip-block-hint'); // NOUVEAU
+const tooltipBlockHint = document.getElementById('tooltip-block-hint');
 
 let hoveredNode = null; 
 
@@ -278,14 +269,12 @@ function updateTooltipContent(data) {
     if (data.isMe) {
         tooltipHeader.innerText = data.host === 'BOUCLIER ACTIF' ? "SYSTÈME DE DÉFENSE" : (data.host === 'RÉSEAU LOCAL' ? "INFRASTRUCTURE DÉTECTÉE" : "ACCÈS SYSTÈME SÉCURISÉ");
         tooltipStatus.innerText = data.status; tooltipStatus.style.color = "#ffffff"; tooltip.style.borderColor = "#ffffff";
-        tooltipBlockHint.innerText = ""; // Pas de blocage sur nos systèmes
+        tooltipBlockHint.innerText = ""; 
     } else {
         tooltipHeader.innerText = "CIBLE DÉTECTÉE";
         tooltipStatus.innerText = data.status.toUpperCase();
         const statusColor = data.status.includes('BLOQUÉ') ? '#' + inactiveColor.getHexString() : (data.systemId === 'defense' ? '#' + defenseColor.getHexString() : '#' + activeColor.getHexString());
         tooltipStatus.style.color = statusColor; tooltip.style.borderColor = statusColor;
-        
-        // Affiche l'indication de blocage si la cible n'est pas déjà bloquée
         tooltipBlockHint.innerText = data.status.includes('BLOQUÉ') ? "" : "[ B ] POUR BLOQUER L'IP";
     }
     tooltip.style.display = 'block';
@@ -313,7 +302,7 @@ document.getElementById('color-theme').addEventListener('input', (e) => {
     document.body.style.color = e.target.value; 
     localStorage.setItem('cyber_theme', e.target.value); 
 });
-document.getElementById('color-defense').addEventListener('input', (e) => { // NOUVEAU
+document.getElementById('color-defense').addEventListener('input', (e) => { 
     defenseColor.set(e.target.value); 
     defenseGlobeMat.color.set(e.target.value);
     defenseSpriteMat.color.set(e.target.value);
@@ -358,7 +347,6 @@ function animate() {
         
         if (hosts.length > 0 && Math.random() < 0.05) {
             const target = hosts[Math.floor(Math.random() * hosts.length)];
-            // Le signal prend la couleur du thème, sauf si c'est la planète défense
             const sigMat = sys.type === 'defense' ? defenseSpriteMat : activeSpriteMat;
             const signal = new THREE.Sprite(sigMat);
             signal.scale.set(0.6, 0.6, 1);
