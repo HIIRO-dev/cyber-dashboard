@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <title>Cyber Dashboard - Jarvis Interface</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Correction pour afficher l'IP Locale et Publique sur deux lignes proprement */
+        #tooltip-ip { white-space: pre-wrap; line-height: 1.5; }
+    </style>
     <script type="importmap">
       {
         "imports": {
@@ -94,21 +98,28 @@
 
                 if (window.addPlanet) window.addPlanet('defense', 'defense');
 
-                // CORRECTION FILTRE : On ignore le broadcast, le multicast et l'ARP (le bruit de fond)
-                defenseProcess = spawn('bash', ['-c', 'sudo tcpdump -l -n -i any -Q in not src net 127.0.0.0/8 and not broadcast and not multicast and not arp']);
+                // LE FILTRE ULTIME : Que des PINGS (icmp) ou des ouvertures de connexion (tcp-syn)
+                const pcapFilter = "(icmp or (tcp[tcpflags] & (tcp-syn) != 0)) and not src net 127.0.0.0/8";
+                defenseProcess = spawn('bash', ['-c', `sudo tcpdump -l -n -i any '${pcapFilter}'`]);
 
                 defenseProcess.stdout.on('data', (data) => {
                     const lines = data.toString().split('\n');
                     lines.forEach(line => {
-                        const match = line.match(/IP ([0-9]{1,3}(?:\.[0-9]{1,3}){3}).*?>.*?: (.*)/);
+                        // Regex plus permissive pour attraper le trafic
+                        const match = line.match(/IP\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).*?>.*?:(.*)/);
                         if (match) {
                             const srcIp = match[1];
-                            const info = match[2].substring(0, 35); 
+                            const info = match[2].trim().substring(0, 35); 
                             
                             if (!knownAttackers.has(srcIp)) {
                                 knownAttackers.add(srcIp);
                                 if (window.addNode) {
-                                    window.addNode('defense', srcIp, 'active', 'Menace Externe', info, 'Alerte IDS', 'Sniffing...');
+                                    window.addNode('defense', srcIp, 'active', '1 Paquet intercepté', info, 'Alerte IDS', 'Sniffing...');
+                                }
+                            } else {
+                                // L'attaquant est déjà connu : On met à jour l'info et on fait clignoter !
+                                if (window.updateNodeInfo) {
+                                    window.updateNodeInfo('defense', srcIp, info);
                                 }
                             }
                         }

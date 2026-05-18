@@ -138,7 +138,6 @@ function createSystem(id, radius, isMain = false, type = 'normal') {
 
 createSystem('main', 5, true);
 
-// --- NOUVEAU : GESTION DES IP LOCALE ET PUBLIQUE ---
 const myLocalIp = window.myLocalIp || '127.0.0.1';
 const meSprite = new THREE.Sprite(meSpriteMat);
 meSprite.scale.set(2, 2, 1);
@@ -158,14 +157,12 @@ solarSystem['main'].nodesGroup.add(meSprite);
 fetch('https://api4.ipify.org?format=json')
     .then(r => r.json())
     .then(data => { 
-        // Affiche l'IP locale, et l'IP Publique en dessous
-        meSprite.userData.ip = `${myLocalIp} (LAN)\n\n          ${data.ip} (Publique)`; 
+        meSprite.userData.ip = `${myLocalIp} (LAN)\n${data.ip} (Publique)`; 
         meSprite.userData.geo = 'Routé / En Ligne'; 
     })
     .catch(() => { 
         meSprite.userData.ip = `${myLocalIp} (Locale)`; 
     });
-// ---------------------------------------------------
 
 window.addPlanet = function(systemId, type = 'normal') {
     if (!solarSystem[systemId]) {
@@ -211,6 +208,32 @@ window.addNode = function(targetSystemId, ip, status = 'active', geo = 'Inconnue
     if (sys.netSprite) {
         sys.deviceCount++;
         sys.netSprite.userData.geo = `${sys.deviceCount} Entrée(s) détéctée(s)`;
+    }
+}
+
+// NOUVEAU : Fonction pour mettre à jour une cible (incrémentation et flash visuel)
+window.updateNodeInfo = function(targetSystemId, ip, newInfo) {
+    const sys = solarSystem[targetSystemId];
+    if (!sys) return;
+    
+    const node = sys.nodesGroup.children.find(c => c.userData && c.userData.ip === ip);
+    if (node) {
+        node.userData.ports = newInfo;
+        
+        // Extraction et incrémentation du compteur
+        let currentCount = parseInt(node.userData.geo) || 1;
+        node.userData.geo = (currentCount + 1) + " Paquet(s) intercepté(s)";
+
+        // Effet de Flash (Blanc puis retour à la couleur d'origine)
+        const originalColor = node.material.color.getHex();
+        node.material.color.setHex(0xffffff); // Flash blanc
+        
+        setTimeout(() => { 
+            // On s'assure de ne pas écraser la couleur rouge si l'utilisateur l'a bloqué entre temps
+            if (!node.userData.status.includes('BLOQUÉ')) {
+                node.material.color.setHex(originalColor); 
+            }
+        }, 150);
     }
 }
 
