@@ -138,16 +138,34 @@ function createSystem(id, radius, isMain = false, type = 'normal') {
 
 createSystem('main', 5, true);
 
+// --- NOUVEAU : GESTION DES IP LOCALE ET PUBLIQUE ---
+const myLocalIp = window.myLocalIp || '127.0.0.1';
 const meSprite = new THREE.Sprite(meSpriteMat);
 meSprite.scale.set(2, 2, 1);
-meSprite.userData = { isMe: true, type: 'host', systemId: 'main', ip: 'Recherche IP...', host: 'Localhost', mac: 'Système', status: 'ONLINE', geo: '-', ports: '-' };
+meSprite.userData = { 
+    isMe: true, 
+    type: 'host', 
+    systemId: 'main', 
+    ip: `${myLocalIp} (Locale)`, 
+    host: 'Machine Locale (Kali)', 
+    mac: 'Système', 
+    status: 'ONLINE', 
+    geo: '-', 
+    ports: '-' 
+};
 solarSystem['main'].nodesGroup.add(meSprite);
 
-// CORRECTION : api4 au lieu de api pour forcer l'IPv4
 fetch('https://api4.ipify.org?format=json')
     .then(r => r.json())
-    .then(data => { meSprite.userData.ip = `${data.ip} (Pub)`; meSprite.userData.geo = 'En Ligne'; })
-    .catch(() => { meSprite.userData.ip = 'Local'; });
+    .then(data => { 
+        // Affiche l'IP locale, et l'IP Publique en dessous
+        meSprite.userData.ip = `${myLocalIp} (LAN)\n\n          ${data.ip} (Publique)`; 
+        meSprite.userData.geo = 'Routé / En Ligne'; 
+    })
+    .catch(() => { 
+        meSprite.userData.ip = `${myLocalIp} (Locale)`; 
+    });
+// ---------------------------------------------------
 
 window.addPlanet = function(systemId, type = 'normal') {
     if (!solarSystem[systemId]) {
